@@ -1,6 +1,6 @@
 /**
  * TensorFlow.js ML Trainer — handles all in-browser machine learning
- * Supports image (MobileNetV2 transfer learning), text, and CSV classification
+ * Supports image (MobileNet transfer learning), text, and CSV classification
  * Rule 14: Training is cancellable via model.stopTraining = true
  */
 
@@ -12,17 +12,22 @@ let currentModel: tf.LayersModel | null = null;
 let baseModel: tf.LayersModel | null = null;
 let isStopRequested = false;
 
-/** Load MobileNetV2 feature extractor for image classification */
+// Persist data preprocessing states for inference
+let textVocab: Record<string, number> = {};
+let csvMin: tf.Tensor | null = null;
+let csvMax: tf.Tensor | null = null;
+
+/** Load MobileNet feature extractor for image classification */
 async function loadMobileNet(): Promise<tf.LayersModel> {
   if (baseModel) return baseModel;
 
-  // Load MobileNetV2 from TF Hub
+  // Load MobileNetV1 from TF Hub
   const mobilenet = await tf.loadLayersModel(
-    'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v2_1.0_224/model.json'
+    'https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json'
   );
 
   // Use an intermediate layer as feature extractor
-  const layer = mobilenet.getLayer('out_relu');
+  const layer = mobilenet.getLayer('conv_pw_13_relu');
   baseModel = tf.model({
     inputs: mobilenet.inputs,
     outputs: layer.output as tf.SymbolicTensor,
@@ -105,6 +110,7 @@ function prepareTextDataset(
   sortedWords.forEach(([word], i) => {
     wordIndex[word] = i + 1; // 0 is reserved for padding
   });
+  textVocab = wordIndex; // Save globally for inference
 
   const maxLen = 100;
   const allSequences: number[][] = [];
@@ -263,10 +269,15 @@ async function trainCSVModel(
   const featureTensor = tf.tensor2d(allFeatures);
 
   // Min-max normalize
-  const min = featureTensor.min(0);
-  const max = featureTensor.max(0);
-  const range = max.sub(min).add(1e-7);
-  const normalized = featureTensor.sub(min).div(range);
+  if (csvMin) csvMin.dispose(); // Cleanup old training runs
+  if (csvMax) csvMax.dispose();
+
+  // Use tf.keep() to prevent garbage collection
+  csvMin = tf.keep(featureTensor.min(0));
+  csvMax = tf.keep(featureTensor.max(0));
+
+  const range = csvMax!.sub(csvMin!).add(1e-7);
+  const normalized = featureTensor.sub(csvMin!).div(range);
 
   const labelsTensor = tf.oneHot(tf.tensor1d(allLabels, 'int32'), classes.length);
 
@@ -307,9 +318,7 @@ async function trainCSVModel(
   featureTensor.dispose();
   normalized.dispose();
   labelsTensor.dispose();
-  (min as tf.Tensor).dispose();
-  (max as tf.Tensor).dispose();
-  (range as tf.Tensor).dispose();
+  range.dispose();
 
   return model;
 }
@@ -404,14 +413,25 @@ export async function predict(
       }
       case 'text': {
         const words = input.toLowerCase().split(/\s+/);
-        const seq = words.map(() => Math.floor(Math.random() * 100)).slice(0, 100);
+        // Map words to the exact integer IDs learned during training
+        const seq = words.map((w) => textVocab[w] || 0).slice(0, 100);
         while (seq.length < 100) seq.push(0);
         inputTensor = tf.tensor2d([seq]);
         break;
       }
       case 'csv': {
         const values = JSON.parse(input) as number[];
-        inputTensor = tf.tensor2d([values]);
+        const rawTensor = tf.tensor2d([values]);
+        
+        // Normalize the incoming inference data using the training bounds
+        if (csvMin && csvMax) {
+          const range = csvMax!.sub(csvMin!).add(1e-7);
+          inputTensor = rawTensor.sub(csvMin!).div(range);
+          range.dispose();
+          rawTensor.dispose();
+        } else {
+          inputTensor = rawTensor; // Fallback
+        }
         break;
       }
       default:
@@ -433,7 +453,12 @@ export async function predict(
 export async function exportModel(): Promise<{ modelJSON: string; weightsData: ArrayBuffer } | null> {
   if (!currentModel) return null;
 
+  let capturedWeights: ArrayBuffer = new ArrayBuffer(0);
+
   const saveResult = await currentModel.save(tf.io.withSaveHandler(async (artifacts) => {
+    if (artifacts.weightData) {
+      capturedWeights = artifacts.weightData as ArrayBuffer;
+    }
     return {
       modelArtifactsInfo: {
         dateSaved: new Date(),
@@ -445,7 +470,7 @@ export async function exportModel(): Promise<{ modelJSON: string; weightsData: A
 
   return {
     modelJSON: JSON.stringify(saveResult),
-    weightsData: new ArrayBuffer(0),
+    weightsData: capturedWeights,
   };
 }
 

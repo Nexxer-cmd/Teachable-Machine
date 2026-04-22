@@ -74,6 +74,12 @@ export default function ImageCapture() {
       toast.error('Select a class first');
       return;
     }
+    
+    // FIX: Clear existing interval to prevent runaway background memory leaks
+    if (captureIntervalRef.current) {
+      window.clearInterval(captureIntervalRef.current);
+    }
+    
     captureFrame();
     captureIntervalRef.current = window.setInterval(captureFrame, 1000 / ML_CONFIG.CAPTURE_FPS);
   };
@@ -104,24 +110,35 @@ export default function ImageCapture() {
     });
 
     const readFiles = validFiles.map((file) => {
-      return new Promise<{ type: 'image' as const; data: string; preview: string }>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const img = new Image();
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = ML_CONFIG.IMAGE_SIZE;
-            canvas.height = ML_CONFIG.IMAGE_SIZE;
-            const ctx = canvas.getContext('2d')!;
-            ctx.drawImage(img, 0, 0, ML_CONFIG.IMAGE_SIZE, ML_CONFIG.IMAGE_SIZE);
-            const dataUrl = canvas.toDataURL('image/jpeg', ML_CONFIG.IMAGE_QUALITY);
-            resolve({ type: 'image', data: dataUrl, preview: dataUrl });
-          };
-          img.src = reader.result as string;
-        };
-        reader.readAsDataURL(file);
-      });
-    });
+  return new Promise<{ type: 'image'; data: string; preview: string }>((resolve) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const img = new Image();
+
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = ML_CONFIG.IMAGE_SIZE;
+        canvas.height = ML_CONFIG.IMAGE_SIZE;
+
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, ML_CONFIG.IMAGE_SIZE, ML_CONFIG.IMAGE_SIZE);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', ML_CONFIG.IMAGE_QUALITY);
+
+        resolve({
+          type: 'image',
+          data: dataUrl,
+          preview: dataUrl
+        });
+      };
+
+      img.src = reader.result as string;
+    };
+
+    reader.readAsDataURL(file);
+  });
+});
 
     Promise.all(readFiles).then((samples) => {
       addSamples(selectedClassId!, samples);
