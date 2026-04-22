@@ -56,34 +56,46 @@ export default function Inference() {
   };
 
   const startLive = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setIsLive(true);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    streamRef.current = stream;
 
-      liveIntervalRef.current = window.setInterval(() => {
-        runImagePrediction();
-      }, 300);
-    } catch {
-      toast.error(STRINGS.ERROR_WEBCAM);
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
     }
-  };
 
-  const stopLive = () => {
-    if (liveIntervalRef.current) {
-      clearInterval(liveIntervalRef.current);
-      liveIntervalRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setIsLive(false);
-  };
+    setIsLive(true);
+
+    // use recursive loop for better control
+    const loop = async () => {
+      if (!streamRef.current) return;
+
+      await runImagePrediction();
+
+      // small delay between predictions
+      liveIntervalRef.current = window.setTimeout(loop, 150);
+    };
+
+    loop();
+  } catch {
+    toast.error(STRINGS.ERROR_WEBCAM);
+  }
+};
+
+const stopLive = () => {
+  if (liveIntervalRef.current) {
+    clearTimeout(liveIntervalRef.current);
+    liveIntervalRef.current = null;
+  }
+
+  if (streamRef.current) {
+    streamRef.current.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+  }
+
+  setIsLive(false);
+};
 
   const handleTextPredict = useCallback(async () => {
     if (!textInput.trim()) return;
@@ -100,22 +112,36 @@ export default function Inference() {
   }, [textInput, classNames, classColors]);
 
   const handleSingleCapture = async () => {
-    if (!videoRef.current) {
-      // Start webcam first
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        streamRef.current = stream;
-        if (videoRef.current) {
-          (videoRef.current as HTMLVideoElement).srcObject = stream;
-          await (videoRef.current as HTMLVideoElement).play();
-        }
-      } catch {
-        toast.error(STRINGS.ERROR_WEBCAM);
-        return;
+  let temporaryStream: MediaStream | null = null;
+
+  if (!videoRef.current || !streamRef.current) {
+    // start webcam for single capture
+    try {
+      temporaryStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      streamRef.current = temporaryStream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = temporaryStream;
+        await videoRef.current.play();
+
+        // wait a bit for camera to adjust (prevents black frame)
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
+    } catch {
+      toast.error(STRINGS.ERROR_WEBCAM);
+      return;
     }
-    await runImagePrediction();
-  };
+  }
+
+  await runImagePrediction();
+
+  // stop camera if it was started temporarily
+  if (temporaryStream && !isLive) {
+    temporaryStream.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }
+};
 
   if (!modelReady) {
     return (
@@ -193,22 +219,17 @@ export default function Inference() {
           <canvas ref={canvasRef} style={{ display: 'none' }} />
 
           <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              className="btn btn-primary"
-              onClick={handleSingleCapture}
-              style={{ flex: 1 }}
-              aria-label="Capture and predict"
-            >
+            <button className="btn btn-primary" onClick={handleSingleCapture} style={{ flex: 1 }} aria-label="Capture and predict">
               <FiCamera size={16} />
-              Capture & Predict
+              {STRINGS.TEST_BTN_CAPTURE}
             </button>
             <button
               className={`btn ${isLive ? 'btn-danger' : 'btn-secondary'}`}
               onClick={isLive ? stopLive : startLive}
-              aria-label={isLive ? 'Stop live mode' : 'Start live mode'}
+              aria-label={isLive ? STRINGS.TEST_BTN_STOP_LIVE : STRINGS.TEST_LIVE}
             >
               <FiPlay size={16} />
-              {isLive ? 'Stop Live' : STRINGS.TEST_LIVE}
+              {isLive ? STRINGS.TEST_BTN_STOP_LIVE : STRINGS.TEST_LIVE}
             </button>
           </div>
         </div>
@@ -222,7 +243,7 @@ export default function Inference() {
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleTextPredict()}
-            placeholder="Type text to classify..."
+            placeholder={STRINGS.TEST_TEXT_PLACEHOLDER}
             aria-label="Text input for prediction"
           />
           <button

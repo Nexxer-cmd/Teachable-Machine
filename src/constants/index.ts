@@ -114,6 +114,15 @@ export const STRINGS = {
   ERROR_AI_RATE_LIMIT: 'Gemini is busy, retrying in 5s...',
   ERROR_AI_OFFLINE: 'Could not reach AI assistant. Showing offline tips.',
   ERROR_AI_EMPTY: 'No response received. Try rephrasing your question.',
+
+
+  // Resolve hardcoded
+  AI_TUTOR_WELCOME: "Hi! I'm your ML tutor.",
+  AI_TUTOR_SUB: "Ask me anything about your model, training, or machine learning concepts.",
+  TEST_BTN_CAPTURE: "Capture & Predict",
+  TEST_BTN_STOP_LIVE: "Stop Live",
+  TEST_TEXT_PLACEHOLDER: "Type text to classify...",
+  CHART_EMPTY_STATE: "ics will appear here during training.",
 } as const;
 
 // ── Training Defaults ──────────────────────────────────────

@@ -33,7 +33,7 @@ export interface ProjectSlice {
   updateTrainingConfig: (config: Partial<TrainingConfig>) => void;
 
   // Persistence
-  saveProject: () => void;
+  saveProject: () => Promise<void>; // Updated to be async for backend fetching
   deleteSavedProject: (projectId: string) => void;
   loadSavedProjects: () => void;
 }
@@ -223,9 +223,11 @@ export const createProjectSlice: StateCreator<ProjectSlice> = (set, get) => ({
     });
   },
 
-  saveProject: () => {
+  saveProject: async () => {
     const { currentProject, savedProjects } = get();
     if (!currentProject) return;
+    
+    // Update local UI state immediately for snappy response
     const existing = savedProjects.findIndex((p) => p.id === currentProject.id);
     const updated = [...savedProjects];
     if (existing >= 0) {
@@ -234,13 +236,27 @@ export const createProjectSlice: StateCreator<ProjectSlice> = (set, get) => ({
       updated.push(currentProject);
     }
     set({ savedProjects: updated });
+
+    // Send data to FastAPI backend
     try {
-      localStorage.setItem('tm_projects', JSON.stringify(updated));
-    } catch {
-      console.warn('Failed to save to localStorage');
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/projects`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(currentProject),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save to backend');
+      }
+    } catch (error) {
+      console.error('Backend save failed:', error);
     }
   },
 
+  // Note: For full production readiness, deleteSavedProject and loadSavedProjects 
+  // will eventually need to be converted to API calls (DELETE /projects/{id} and GET /projects)
   deleteSavedProject: (projectId) => {
     set((state) => {
       const updated = state.savedProjects.filter((p) => p.id !== projectId);

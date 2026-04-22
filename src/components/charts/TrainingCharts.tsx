@@ -24,7 +24,7 @@ export default function TrainingCharts() {
         color: 'var(--text-secondary)',
         fontSize: '14px',
       }}>
-        <p>Training metrics will appear here during training.</p>
+        <p>{STRINGS.CHART_EMPTY_STATE}</p>
       </div>
     );
   }

@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { FiSend, FiZap, FiWifi, FiWifiOff } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
+import toast from 'react-hot-toast';
 
 export default function AIAssistant() {
   const { currentProject, metrics, showAIPanel } = useStore();
@@ -93,8 +94,11 @@ export default function AIAssistant() {
           setIsLoading(false);
         }
       );
-    } catch {
+    } catch (error) {
       setIsLoading(false);
+      // CRITICAL FIX: Do not swallow the error. Notify the user.
+      console.error("AI Communication Error:", error);
+      toast.error("Failed to connect to the AI Assistant."); 
     }
   };
 
@@ -164,12 +168,12 @@ export default function AIAssistant() {
             flex: 1,
           }}>
             <div style={{ fontSize: '40px', marginBottom: '12px' }}>🤖</div>
-            <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
-              Hi! I&apos;m your ML tutor.
-            </p>
-            <p style={{ fontSize: '13px' }}>
-              Ask me anything about your model, training, or machine learning concepts.
-            </p>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+                {STRINGS.AI_TUTOR_WELCOME}
+              </p>
+              <p style={{ fontSize: '13px' }}>
+                {STRINGS.AI_TUTOR_SUB}
+              </p>
           </div>
         )}
 
