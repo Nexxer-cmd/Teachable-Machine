@@ -26,6 +26,11 @@ export default function ImageCapture() {
 
   const startWebcam = async () => {
     try {
+      // 1. Check if the browser API is even available (fails if not localhost/HTTPS)
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera API not available. Make sure you are using http://localhost:5173");
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480, facingMode: 'user' },
       });
@@ -35,8 +40,18 @@ export default function ImageCapture() {
         await videoRef.current.play();
       }
       setWebcamActive(true);
-    } catch {
-      toast.error(STRINGS.ERROR_WEBCAM);
+    } catch (error: any) {
+      // 2. Log the actual error to the console for debugging
+      console.error("Detailed Webcam Error:", error);
+      
+      // 3. Show a more specific error in the UI
+      if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+        toast.error("Camera is already in use by another app or tab.");
+      } else if (error.name === 'NotFoundError') {
+        toast.error("No camera found on this device.");
+      } else {
+        toast.error(error.message || STRINGS.ERROR_WEBCAM);
+      }
     }
   };
 
