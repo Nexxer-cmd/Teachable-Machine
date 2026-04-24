@@ -17,6 +17,58 @@ let textVocab: Record<string, number> = {};
 let csvMin: tf.Tensor | null = null;
 let csvMax: tf.Tensor | null = null;
 
+// ── Preprocessing State Persistence ──────────────────────────
+// Fixes Bug 1: textVocab / csvMin / csvMax must survive page reloads.
+
+const PREPROCESSING_KEY = 'tm-preprocessing-state';
+
+interface PreprocessingState {
+  textVocab: Record<string, number>;
+  csvMin: number[] | null;
+  csvMax: number[] | null;
+}
+
+/** Save preprocessing state to localStorage so inference works after reload. */
+function savePreprocessingState(): void {
+  try {
+    const state: PreprocessingState = {
+      textVocab,
+      csvMin: csvMin ? Array.from(csvMin.dataSync()) : null,
+      csvMax: csvMax ? Array.from(csvMax.dataSync()) : null,
+    };
+    localStorage.setItem(PREPROCESSING_KEY, JSON.stringify(state));
+  } catch (err) {
+    console.warn('Failed to persist preprocessing state:', err);
+  }
+}
+
+/** Restore preprocessing state from localStorage. */
+function restorePreprocessingState(): void {
+  try {
+    const raw = localStorage.getItem(PREPROCESSING_KEY);
+    if (!raw) return;
+
+    const state: PreprocessingState = JSON.parse(raw);
+
+    // Restore textVocab (plain object, always safe)
+    if (state.textVocab && Object.keys(state.textVocab).length > 0) {
+      textVocab = state.textVocab;
+    }
+
+    // Restore csvMin / csvMax as 1-D tensors, kept outside tf.tidy
+    if (state.csvMin) {
+      if (csvMin) csvMin.dispose();
+      csvMin = tf.keep(tf.tensor1d(state.csvMin));
+    }
+    if (state.csvMax) {
+      if (csvMax) csvMax.dispose();
+      csvMax = tf.keep(tf.tensor1d(state.csvMax));
+    }
+  } catch (err) {
+    console.warn('Failed to restore preprocessing state:', err);
+  }
+}
+
 /** Load MobileNet feature extractor for image classification */
 async function loadMobileNet(): Promise<tf.LayersModel> {
   if (baseModel) return baseModel;
@@ -49,6 +101,15 @@ function imageToTensor(base64: string): tf.Tensor3D {
     const imageData = ctx.getImageData(0, 0, ML_CONFIG.IMAGE_SIZE, ML_CONFIG.IMAGE_SIZE);
     return tf.browser.fromPixels(imageData).toFloat().div(255.0);
   });
+}
+
+/**
+ * Validate that a base64 string is a valid image (not raw audio).
+ * Fixes Bug 3a: Audio pipeline assumes spectrogram images but may receive raw audio blobs.
+ */
+function isValidImageData(base64: string): boolean {
+  // data:image/* prefix is required for valid image data
+  return base64.startsWith('data:image/');
 }
 
 /** Prepare image dataset with MobileNet feature extraction */
@@ -359,16 +420,32 @@ export async function trainModel(
       case 'csv':
         currentModel = await trainCSVModel(classes, config, onEpochEnd);
         break;
-      case 'audio':
-        // Audio uses same pipeline as image with spectrogram features
+      case 'audio': {
+        // Bug 3a fix: Validate that audio samples have been converted to spectrogram images.
+        // The AudioCapture component stores raw audio as data:audio/* blobs.
+        // Training on raw audio requires spectrogram conversion first.
+        const firstSample = classes[0]?.samples[0];
+        if (firstSample && !isValidImageData(firstSample.data)) {
+          throw new Error(
+            'Audio training requires spectrogram images. ' +
+            'The current audio capture records raw audio blobs. ' +
+            'Please use the Image data type with screenshot-based spectrograms, ' +
+            'or convert audio samples to spectrograms before training.'
+          );
+        }
         currentModel = await trainImageModel(classes, config, onEpochEnd, onProgress);
         break;
+      }
     }
 
-    // Save to localStorage
+    // Save model weights to localStorage
     if (currentModel) {
       await currentModel.save('localstorage://teachable-machine-model');
     }
+
+    // Bug 1 fix: Persist preprocessing state (textVocab, csvMin, csvMax)
+    // so inference works correctly after page reloads.
+    savePreprocessingState();
   } catch (error) {
     if (!isStopRequested) throw error;
   }
@@ -390,11 +467,16 @@ export async function predict(
     // Try loading from localStorage
     try {
       currentModel = await tf.loadLayersModel('localstorage://teachable-machine-model');
+      // Bug 1 fix: Also restore preprocessing state when reloading model
+      restorePreprocessingState();
     } catch {
       throw new Error('No trained model found. Please train a model first.');
     }
   }
 
+  // Bug 3b fix: Wrap inference in tf.tidy() but do NOT manually dispose
+  // tensors created inside it — tf.tidy() handles cleanup automatically.
+  // Manual dispose inside tidy() is redundant and can cause double-dispose warnings.
   return tf.tidy(() => {
     let inputTensor: tf.Tensor;
 
@@ -425,12 +507,14 @@ export async function predict(
         
         // Normalize the incoming inference data using the training bounds
         if (csvMin && csvMax) {
-          const range = csvMax!.sub(csvMin!).add(1e-7);
-          inputTensor = rawTensor.sub(csvMin!).div(range);
-          range.dispose();
-          rawTensor.dispose();
+          const range = csvMax.sub(csvMin).add(1e-7);
+          inputTensor = rawTensor.sub(csvMin).div(range);
+          // Bug 3b fix: Do NOT call range.dispose() or rawTensor.dispose() here.
+          // tf.tidy() will dispose all intermediate tensors automatically.
         } else {
-          inputTensor = rawTensor; // Fallback
+          // Fallback: unnormalized (will produce poor results, but won't crash)
+          console.warn('CSV normalization bounds not available. Predictions may be inaccurate.');
+          inputTensor = rawTensor;
         }
         break;
       }
@@ -450,7 +534,7 @@ export async function predict(
 }
 
 /** Export model as downloadable files */
-export async function exportModel(): Promise<{ modelJSON: string; weightsData: ArrayBuffer } | null> {
+export async function exportModel(): Promise<{ modelJSON: string; weightsData: ArrayBuffer; preprocessingState: string } | null> {
   if (!currentModel) return null;
 
   let capturedWeights: ArrayBuffer = new ArrayBuffer(0);
@@ -468,9 +552,17 @@ export async function exportModel(): Promise<{ modelJSON: string; weightsData: A
     };
   }));
 
+  // Include preprocessing state in export so imported models work correctly
+  const preprocessingState = JSON.stringify({
+    textVocab,
+    csvMin: csvMin ? Array.from(csvMin.dataSync()) : null,
+    csvMax: csvMax ? Array.from(csvMax.dataSync()) : null,
+  });
+
   return {
     modelJSON: JSON.stringify(saveResult),
     weightsData: capturedWeights,
+    preprocessingState,
   };
 }
 

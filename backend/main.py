@@ -101,8 +101,21 @@ async def ai_chat(req: ChatRequest):
             try:
                 response = model.generate_content(req.message, stream=True)
                 for chunk in response:
-                    if chunk.text:
-                        yield f"data: {json.dumps({'text': chunk.text})}\n\n"
+                    # Bug 2b fix: Guard against safety-blocked chunks.
+                    # When Gemini blocks a generation via safety filters,
+                    # chunk.text is not populated and accessing it throws ValueError.
+                    try:
+                        if hasattr(chunk, 'parts') and chunk.parts:
+                            text = chunk.text
+                            if text:
+                                yield f"data: {json.dumps({'text': text})}\n\n"
+                        elif hasattr(chunk, 'prompt_feedback') and chunk.prompt_feedback:
+                            # The prompt itself was blocked by safety filters
+                            block_reason = str(chunk.prompt_feedback)
+                            yield f"data: {json.dumps({'text': f'I cannot respond to that request. (Safety filter: {block_reason})'})}\n\n"
+                    except (ValueError, AttributeError):
+                        # Safety-blocked chunk — skip gracefully
+                        yield f"data: {json.dumps({'text': 'Response was filtered by safety settings. Please rephrase your question.'})}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -149,7 +162,8 @@ async def get_project(project_id: str):
 @app.post("/api/projects")
 async def save_project(req: ProjectSaveRequest):
     """Save project metadata"""
-    projects_store[req.id] = req.dict()
+    # Bug 2a fix: .dict() is deprecated in Pydantic V2. Use .model_dump() instead.
+    projects_store[req.id] = req.model_dump()
     return {
         "success": True,
         "data": {"id": req.id, "message": "Project saved"},

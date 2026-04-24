@@ -27,6 +27,7 @@ export default function ExportModal() {
 
       const zip = new JSZip();
       zip.file('model.json', result.modelJSON);
+      zip.file('preprocessing_state.json', result.preprocessingState);
       zip.file('README.md', generateReadme());
 
       // Add embed code snippet
