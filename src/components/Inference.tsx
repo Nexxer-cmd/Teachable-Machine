@@ -5,7 +5,7 @@ import { useStore } from '../store';
 import { STRINGS } from '../constants';
 import { predict } from '../lib/trainer';
 import type { InferenceResult } from '../types';
-import { FiCamera, FiType, FiPlay, FiZap } from 'react-icons/fi';
+import { FiCamera, FiType, FiPlay, FiZap, FiTarget } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -32,9 +32,9 @@ export default function Inference() {
   const classColors = currentProject.classes.map((c) => c.color);
 
   const getConfidenceColor = (confidence: number): string => {
-    if (confidence >= 80) return '#34A853';
-    if (confidence >= 50) return '#F9AB00';
-    return '#D93025';
+    if (confidence >= 80) return '#0A3625';
+    if (confidence >= 50) return '#F2B759';
+    return '#8B004A';
   };
 
   const runImagePrediction = async () => {
@@ -272,7 +272,7 @@ const stopLive = () => {
             background: `${getConfidenceColor(results[0].confidence)}15`,
             border: `1px solid ${getConfidenceColor(results[0].confidence)}30`,
           }}>
-            <span style={{ fontSize: '24px' }}>🎯</span>
+            <FiTarget size={22} style={{ color: results[0].classColor, flexShrink: 0 }} />
             <div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: results[0].classColor }}>
                 {results[0].className}

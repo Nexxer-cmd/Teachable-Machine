@@ -3,7 +3,8 @@
 import { useStore } from '../store';
 import { STRINGS, GALLERY_PROJECTS } from '../constants';
 import type { DataType } from '../types';
-import { FiPlus, FiClock, FiTrash2, FiArrowRight } from 'react-icons/fi';
+import { FiPlus, FiClock, FiTrash2, FiArrowRight, FiCamera, FiType, FiMic, FiGrid } from 'react-icons/fi';
+import { TbMoodSmileBeam, TbFileDescription, TbHandStop, TbWaveSine, TbBinaryTree, TbBoxMultiple } from 'react-icons/tb';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
@@ -48,6 +49,16 @@ export default function Home() {
     toast.success(`Started "${template.title}" project!`);
   };
 
+  // Icon map for gallery cards — professional Tabler Icons matching each project
+  const galleryIcons: Record<string, React.ReactNode> = {
+    'face-expression': <TbMoodSmileBeam size={30} strokeWidth={1.5} />,
+    'text-sentiment': <TbFileDescription size={30} strokeWidth={1.5} />,
+    'hand-gestures': <TbHandStop size={30} strokeWidth={1.5} />,
+    'sound-detection': <TbWaveSine size={30} strokeWidth={1.5} />,
+    'number-classifier': <TbBinaryTree size={30} strokeWidth={1.5} />,
+    'object-sorter': <TbBoxMultiple size={30} strokeWidth={1.5} />,
+  };
+
   return (
     <main style={{ flex: 1, overflow: 'auto' }}>
       {/* Hero Section */}
@@ -75,17 +86,18 @@ export default function Home() {
           transition={{ duration: 0.6 }}
         >
           <div style={{ marginBottom: '16px' }}>
-            <span className="badge badge-primary" style={{ fontSize: '13px', padding: '5px 14px' }}>
-              ✨ 100% Free · Runs in Your Browser
+            <span className="badge badge-primary" style={{ fontSize: '11px', padding: '6px 16px' }}>
+              100% Free · Runs in Your Browser
             </span>
           </div>
 
           <h1 style={{
+            fontFamily: "var(--font-display)",
             fontSize: 'clamp(36px, 5vw, 56px)',
-            fontWeight: 900,
-            lineHeight: 1.1,
+            fontWeight: 400,
+            lineHeight: 1.15,
             marginBottom: '16px',
-            letterSpacing: '-1px',
+            letterSpacing: '1px',
           }}>
             <span className="gradient-text">{STRINGS.APP_TAGLINE}</span>
           </h1>
@@ -141,9 +153,12 @@ export default function Home() {
                 borderRadius: 'var(--radius-full)',
                 background: 'var(--surface-card)',
                 border: '1px solid var(--border-color)',
-                fontSize: '13px',
+                fontSize: '10px',
+                fontFamily: 'var(--font-tech)',
                 fontWeight: 500,
                 color: 'var(--text-secondary)',
+                letterSpacing: '.5px',
+                textTransform: 'uppercase' as const,
               }}
             >
               {label}
@@ -155,7 +170,7 @@ export default function Home() {
       {/* Gallery Templates */}
       <section id="gallery" style={{ padding: '40px', maxWidth: '1200px', margin: '0 auto' }}>
         <div style={{ marginBottom: '24px' }}>
-          <h2 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '4px' }}>{STRINGS.GALLERY_TITLE}</h2>
+          <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '4px', fontFamily: 'var(--font-heading)' }}>{STRINGS.GALLERY_TITLE}</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '15px' }}>{STRINGS.GALLERY_SUBTITLE}</p>
         </div>
 
@@ -180,21 +195,39 @@ export default function Home() {
                 aria-label={`Start ${template.title} project`}
                 style={{ cursor: 'pointer', overflow: 'hidden' }}
               >
-                {/* Gradient header */}
+                {/* Gradient header with icon */}
                 <div style={{
-                  height: '80px',
+                  height: '100px',
                   background: template.gradient,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '40px',
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}>
-                  {template.icon}
+                  {/* Subtle dot pattern overlay */}
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    backgroundImage: 'radial-gradient(circle, rgba(255,255,255,.08) 1px, transparent 1px)',
+                    backgroundSize: '12px 12px',
+                  }} />
+                  <div style={{
+                    width: '56px', height: '56px', borderRadius: '16px',
+                    background: 'rgba(255,255,255,.15)',
+                    backdropFilter: 'blur(8px)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff',
+                    boxShadow: '0 4px 16px rgba(0,0,0,.15)',
+                    position: 'relative',
+                    zIndex: 1,
+                  }}>
+                    {galleryIcons[template.id] || template.icon}
+                  </div>
                 </div>
 
                 <div style={{ padding: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>{template.title}</h3>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, fontFamily: 'var(--font-heading)' }}>{template.title}</h3>
                     <span className="badge badge-primary">{template.dataType}</span>
                   </div>
                   <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 12px 0', lineHeight: 1.5 }}>
@@ -293,11 +326,11 @@ function NewProjectModal({
   onClose: () => void;
   onCreate: (name: string, dataType: DataType) => void;
 }) {
-  const dataTypes: { type: DataType; label: string; icon: string; desc: string }[] = [
-    { type: 'image', label: 'Image', icon: '📷', desc: 'Webcam or uploaded images' },
-    { type: 'text', label: 'Text', icon: '📝', desc: 'Text classification' },
-    { type: 'audio', label: 'Audio', icon: '🎵', desc: 'Sound and voice' },
-    { type: 'csv', label: 'CSV', icon: '📊', desc: 'Tabular data' },
+  const dataTypes: { type: DataType; label: string; icon: React.ReactNode; desc: string }[] = [
+    { type: 'image', label: 'Image', icon: <FiCamera size={32} />, desc: 'Webcam or uploaded images' },
+    { type: 'text', label: 'Text', icon: <FiType size={32} />, desc: 'Text classification' },
+    { type: 'audio', label: 'Audio', icon: <FiMic size={32} />, desc: 'Sound and voice' },
+    { type: 'csv', label: 'CSV', icon: <FiGrid size={32} />, desc: 'Tabular data' },
   ];
 
   const handleSelect = (type: DataType) => {
@@ -313,7 +346,7 @@ function NewProjectModal({
         animate={{ opacity: 1, scale: 1 }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 style={{ fontSize: '20px', fontWeight: 800, marginBottom: '4px' }}>{STRINGS.NAV_NEW_PROJECT}</h2>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px', fontFamily: 'var(--font-heading)' }}>{STRINGS.NAV_NEW_PROJECT}</h2>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '24px' }}>
           Choose your data type to get started
         </p>
@@ -334,7 +367,7 @@ function NewProjectModal({
                 textAlign: 'center',
               }}
             >
-              <div style={{ fontSize: '36px', marginBottom: '8px' }}>{dt.icon}</div>
+              <div style={{ marginBottom: '8px', color: 'var(--the-mint)' }}>{dt.icon}</div>
               <h3 style={{ fontSize: '15px', fontWeight: 700, margin: '0 0 4px 0' }}>{dt.label}</h3>
               <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>{dt.desc}</p>
             </div>

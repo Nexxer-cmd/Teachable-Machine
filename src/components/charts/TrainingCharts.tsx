@@ -49,10 +49,10 @@ export default function TrainingCharts() {
         marginBottom: '20px',
       }}>
         {[
-          { label: STRINGS.TRAIN_LOSS, value: latestMetrics.loss.toFixed(4), color: '#EA4335' },
-          { label: `Val ${STRINGS.TRAIN_LOSS}`, value: latestMetrics.valLoss.toFixed(4), color: '#FF8A80' },
-          { label: STRINGS.TRAIN_ACCURACY, value: `${latestMetrics.accuracy.toFixed(1)}%`, color: '#34A853' },
-          { label: `Val ${STRINGS.TRAIN_ACCURACY}`, value: `${latestMetrics.valAccuracy.toFixed(1)}%`, color: '#81C995' },
+          { label: STRINGS.TRAIN_LOSS, value: latestMetrics.loss.toFixed(4), color: '#8B004A' },
+          { label: `Val ${STRINGS.TRAIN_LOSS}`, value: latestMetrics.valLoss.toFixed(4), color: '#C87740' },
+          { label: STRINGS.TRAIN_ACCURACY, value: `${latestMetrics.accuracy.toFixed(1)}%`, color: '#00A19B' },
+          { label: `Val ${STRINGS.TRAIN_ACCURACY}`, value: `${latestMetrics.valAccuracy.toFixed(1)}%`, color: '#CCDA47' },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -62,7 +62,7 @@ export default function TrainingCharts() {
             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: 500 }}>
               {stat.label}
             </div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: stat.color, marginTop: '4px' }}>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: stat.color, marginTop: '4px', fontFamily: 'var(--font-tech)' }}>
               {stat.value}
             </div>
           </div>
@@ -92,7 +92,7 @@ export default function TrainingCharts() {
                 type="monotone"
                 dataKey="loss"
                 name="Training"
-                stroke="#1A73E8"
+                stroke="#8B004A"
                 strokeWidth={2}
                 dot={false}
                 animationDuration={300}
@@ -101,7 +101,7 @@ export default function TrainingCharts() {
                 type="monotone"
                 dataKey="valLoss"
                 name="Validation"
-                stroke="#34A853"
+                stroke="#C87740"
                 strokeWidth={2}
                 dot={false}
                 strokeDasharray="5 5"
@@ -132,7 +132,7 @@ export default function TrainingCharts() {
                 type="monotone"
                 dataKey="accuracy"
                 name="Training"
-                stroke="#1A73E8"
+                stroke="#00A19B"
                 strokeWidth={2}
                 dot={false}
                 animationDuration={300}
@@ -141,7 +141,7 @@ export default function TrainingCharts() {
                 type="monotone"
                 dataKey="valAccuracy"
                 name="Validation"
-                stroke="#34A853"
+                stroke="#CCDA47"
                 strokeWidth={2}
                 dot={false}
                 strokeDasharray="5 5"

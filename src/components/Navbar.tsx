@@ -90,7 +90,7 @@ export default function Navbar() {
               <FiSave size={18} />
             </button>
             <button
-              className="btn btn-secondary btn-sm"
+              className="btn btn-warm btn-sm"
               onClick={() => setShowExportModal(true)}
               aria-label={STRINGS.NAV_EXPORT}
             >

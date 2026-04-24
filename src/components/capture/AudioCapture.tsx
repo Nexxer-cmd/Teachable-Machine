@@ -40,7 +40,7 @@ export default function AudioCapture() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.lineWidth = 2;
-      ctx.strokeStyle = '#4285F4';
+      ctx.strokeStyle = '#00A19B';
       ctx.beginPath();
 
       const sliceWidth = canvas.width / bufferLength;
@@ -92,7 +92,7 @@ export default function AudioCapture() {
           addSample(selectedClassId!, {
             type: 'audio',
             data: reader.result as string,
-            preview: `🎵 ${(blob.size / 1024).toFixed(1)}KB`,
+            preview: `Audio ${(blob.size / 1024).toFixed(1)}KB`,
           });
           toast.success('Audio sample recorded');
         };

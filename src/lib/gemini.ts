@@ -92,30 +92,30 @@ export function getOfflineTips(accuracy: number, loss: number, epochs: number): 
   const tips: string[] = [];
 
   if (accuracy < 50) {
-    tips.push('⚠️ Accuracy is very low. Try adding more diverse samples to each class.');
-    tips.push('💡 Make sure your classes are visually distinct from each other.');
-    tips.push('🔧 Try increasing the number of training epochs.');
+    tips.push('**Warning** — Accuracy is very low. Try adding more diverse samples to each class.');
+    tips.push('**Tip** — Make sure your classes are visually distinct from each other.');
+    tips.push('**Fix** — Try increasing the number of training epochs.');
   } else if (accuracy < 70) {
-    tips.push('📊 Accuracy is moderate. Consider adding more training samples.');
-    tips.push('⚙️ Try adjusting the learning rate — lower values train slower but more accurately.');
-    tips.push('🎯 Check if your classes have similar numbers of samples (balanced data).');
+    tips.push('**Stats** — Accuracy is moderate. Consider adding more training samples.');
+    tips.push('**Config** — Try adjusting the learning rate — lower values train slower but more accurately.');
+    tips.push('**Balance** — Check if your classes have similar numbers of samples.');
   } else if (accuracy < 90) {
-    tips.push('✅ Good accuracy! Try fine-tuning with more epochs.');
-    tips.push('📈 Consider adding harder-to-classify samples to improve robustness.');
+    tips.push('**Good** — Good accuracy! Try fine-tuning with more epochs.');
+    tips.push('**Improve** — Consider adding harder-to-classify samples to improve robustness.');
   } else {
-    tips.push('🎉 Excellent accuracy! Your model is performing well.');
-    tips.push('⚠️ Watch out for overfitting — test with new, unseen data.');
-    tips.push('💡 If validation loss is increasing while training loss decreases, reduce epochs.');
+    tips.push('**Excellent** — Your model is performing well.');
+    tips.push('**Caution** — Watch out for overfitting. Test with new, unseen data.');
+    tips.push('**Tip** — If validation loss is increasing while training loss decreases, reduce epochs.');
   }
 
   if (loss > 1) {
-    tips.push('📉 High loss suggests the model is struggling. Add more data or reduce complexity.');
+    tips.push('**Loss** — High loss suggests the model is struggling. Add more data or reduce complexity.');
   }
 
   if (epochs < 10) {
-    tips.push('🔄 You might benefit from training for more epochs.');
+    tips.push('**Epochs** — You might benefit from training for more epochs.');
   } else if (epochs > 100) {
-    tips.push('⏰ Many epochs — check if the model has converged (stable loss curve).');
+    tips.push('**Duration** — Many epochs. Check if the model has converged (stable loss curve).');
   }
 
   return tips;

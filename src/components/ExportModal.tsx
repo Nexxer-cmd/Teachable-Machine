@@ -112,7 +112,7 @@ const prediction = model.predict(inputTensor);
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <FiDownload size={20} style={{ color: 'var(--primary)' }} />
-            <h2 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>{STRINGS.EXPORT_TITLE}</h2>
+            <h2 style={{ fontSize: '18px', fontWeight: 700, margin: 0, fontFamily: 'var(--font-heading)' }}>{STRINGS.EXPORT_TITLE}</h2>
           </div>
           <button
             className="btn btn-ghost btn-icon"
@@ -132,7 +132,7 @@ const prediction = model.predict(inputTensor);
                 width: '48px',
                 height: '48px',
                 borderRadius: 'var(--radius)',
-                background: 'linear-gradient(135deg, #FF6F00, #FFA726)',
+                background: 'linear-gradient(135deg, #C87740, #F2B759)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -157,7 +157,7 @@ const prediction = model.predict(inputTensor);
                 width: '48px',
                 height: '48px',
                 borderRadius: 'var(--radius)',
-                background: 'linear-gradient(135deg, #1A73E8, #4285F4)',
+                background: 'linear-gradient(135deg, #0A3625, #00A19B)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

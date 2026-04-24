@@ -65,7 +65,7 @@ export default function Workspace() {
       );
       setModelReady(true);
       setStep('test');
-      toast.success('Training complete! 🎉');
+      toast.success('Training complete!');
     } catch (err) {
       setStopTraining();
       const message = err instanceof Error ? err.message : 'Training failed';
@@ -104,7 +104,7 @@ export default function Workspace() {
     <div>
       {/* Training config */}
       <div className="card" style={{ padding: '20px', marginBottom: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '16px' }}>Training Configuration</h3>
+        <h3 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '16px', fontFamily: 'var(--font-heading)' }}>Training Configuration</h3>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
           {/* Epochs */}
@@ -210,7 +210,7 @@ export default function Workspace() {
             alignItems: 'center',
             gap: '8px',
             fontSize: '13px',
-            color: '#E37400',
+            color: 'var(--warning)',
           }}>
             <FiAlertCircle size={16} />
             {!minClassesOk ? STRINGS.TRAIN_MIN_CLASSES : STRINGS.TRAIN_MIN_SAMPLES}

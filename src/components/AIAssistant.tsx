@@ -6,7 +6,7 @@ import { STRINGS, QUICK_PROMPTS } from '../constants';
 import { sendChatMessage, getOfflineTips } from '../lib/gemini';
 import type { ChatMessage } from '../types';
 import { v4 as uuidv4 } from 'uuid';
-import { FiSend, FiZap, FiWifi, FiWifiOff } from 'react-icons/fi';
+import { FiSend, FiZap, FiWifi, FiWifiOff, FiCpu } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import toast from 'react-hot-toast';
@@ -84,7 +84,7 @@ export default function AIAssistant() {
             const updated = [...prev];
             const lastMsg = updated[updated.length - 1];
             if (lastMsg.role === 'assistant') {
-              lastMsg.content = `${STRINGS.AI_OFFLINE_TIP}\n\n${tips.join('\n')}`;
+              lastMsg.content = `${STRINGS.AI_OFFLINE_TIP}\n\n${tips.map(t => `- ${t}`).join('\n\n')}`;
             }
             return [...updated];
           });
@@ -115,7 +115,7 @@ export default function AIAssistant() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <FiZap size={16} style={{ color: 'var(--primary)' }} />
           <div>
-            <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>{STRINGS.AI_TITLE}</h3>
+            <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, fontFamily: 'var(--font-heading)' }}>{STRINGS.AI_TITLE}</h3>
             <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
               {STRINGS.AI_POWERED_BY}
             </span>
@@ -167,8 +167,15 @@ export default function AIAssistant() {
             color: 'var(--text-secondary)',
             flex: 1,
           }}>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🤖</div>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '14px',
+              background: 'linear-gradient(135deg, var(--the-mint), var(--bottle-green))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: '12px', color: '#fff',
+            }}>
+              <FiCpu size={24} />
+            </div>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px', fontFamily: 'var(--font-heading)' }}>
                 {STRINGS.AI_TUTOR_WELCOME}
               </p>
               <p style={{ fontSize: '13px' }}>

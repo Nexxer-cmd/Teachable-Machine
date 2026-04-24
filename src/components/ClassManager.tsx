@@ -4,8 +4,58 @@ import { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store';
 import { STRINGS, ML_CONFIG } from '../constants';
 import { FiPlus, FiTrash2, FiEdit2, FiCheck } from 'react-icons/fi';
+import {
+  TbMoodSmileBeam, TbMoodSad, TbMoodSurprised, TbMoodEmpty,
+  TbThumbUp, TbThumbDown,
+  TbHandStop, TbHandFinger, TbHandGrab,
+  TbVolume, TbBellOff, TbMusic, TbMicrophone,
+  TbNumber0, TbNumber1, TbNumber2, TbNumber3, TbNumber4,
+  TbCategory, TbCategory2, TbBox,
+  TbTag,
+} from 'react-icons/tb';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import type { IconType } from 'react-icons';
+
+/**
+ * Maps common class names to matching Tabler Icons.
+ * Keys are normalised to lowercase for lookup.
+ */
+const CLASS_ICON_MAP: Record<string, IconType> = {
+  // Face expressions
+  happy: TbMoodSmileBeam,
+  sad: TbMoodSad,
+  surprised: TbMoodSurprised,
+  neutral: TbMoodEmpty,
+  // Sentiment
+  positive: TbThumbUp,
+  negative: TbThumbDown,
+  // Hand gestures
+  rock: TbHandGrab,
+  paper: TbHandStop,
+  scissors: TbHandFinger,
+  'thumbs up': TbThumbUp,
+  // Sound detection
+  clap: TbVolume,
+  snap: TbMusic,
+  whistle: TbMicrophone,
+  silence: TbBellOff,
+  // Number classifier
+  zero: TbNumber0,
+  one: TbNumber1,
+  two: TbNumber2,
+  three: TbNumber3,
+  four: TbNumber4,
+  // Object sorter
+  'category a': TbCategory,
+  'category b': TbCategory2,
+  'category c': TbBox,
+};
+
+/** Returns the icon component for a class name, or a generic tag icon */
+function getClassIcon(name: string): IconType {
+  return CLASS_ICON_MAP[name.toLowerCase()] || TbTag;
+}
 
 export default function ClassManager() {
   const {
@@ -74,7 +124,7 @@ export default function ClassManager() {
         alignItems: 'center',
       }}>
         <div>
-          <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0 }}>Classes</h3>
+          <h3 style={{ fontSize: '14px', fontWeight: 700, margin: 0, fontFamily: 'var(--font-heading)' }}>Classes</h3>
           <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
             {currentProject.classes.length} classes · {currentProject.dataType}
           </span>
@@ -87,110 +137,121 @@ export default function ClassManager() {
       {/* Class List */}
       <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
         <AnimatePresence>
-          {currentProject.classes.map((cls) => (
-            <motion.div
-              key={cls.id}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div
-                onClick={() => selectClass(cls.id)}
-                role="button"
-                tabIndex={0}
-                aria-label={`Select class ${cls.name}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '10px 12px',
-                  marginBottom: '4px',
-                  borderRadius: 'var(--radius-sm)',
-                  cursor: 'pointer',
-                  background: selectedClassId === cls.id ? 'rgba(26, 115, 232, 0.08)' : 'transparent',
-                  border: selectedClassId === cls.id ? '1px solid rgba(26, 115, 232, 0.2)' : '1px solid transparent',
-                  transition: 'var(--transition)',
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && selectClass(cls.id)}
-              >
-                {/* Color dot */}
-                <div style={{
-                  width: '12px',
-                  height: '12px',
-                  borderRadius: '50%',
-                  background: cls.color,
-                  flexShrink: 0,
-                }} />
+          {currentProject.classes.map((cls) => {
+            const IconComponent = getClassIcon(cls.name);
 
-                {/* Name / Edit */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  {editingId === cls.id ? (
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <input
-                        ref={inputRef}
-                        className="input"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={handleConfirmRename}
-                        onKeyDown={(e) => e.key === 'Enter' && handleConfirmRename()}
-                        style={{ padding: '4px 8px', fontSize: '13px' }}
-                        aria-label="Rename class"
-                      />
+            return (
+              <motion.div
+                key={cls.id}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div
+                  onClick={() => selectClass(cls.id)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Select class ${cls.name}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '10px 12px',
+                    marginBottom: '4px',
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    background: selectedClassId === cls.id ? `${cls.color}12` : 'transparent',
+                    border: selectedClassId === cls.id ? `1px solid ${cls.color}30` : '1px solid transparent',
+                    transition: 'var(--transition)',
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && selectClass(cls.id)}
+                >
+                  {/* Class icon */}
+                  <div style={{
+                    width: '30px',
+                    height: '30px',
+                    borderRadius: '8px',
+                    background: `${cls.color}18`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    color: cls.color,
+                  }}>
+                    <IconComponent size={16} />
+                  </div>
+
+                  {/* Name / Edit */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {editingId === cls.id ? (
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <input
+                          ref={inputRef}
+                          className="input"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={handleConfirmRename}
+                          onKeyDown={(e) => e.key === 'Enter' && handleConfirmRename()}
+                          style={{ padding: '4px 8px', fontSize: '13px' }}
+                          aria-label="Rename class"
+                        />
+                        <button
+                          className="btn btn-ghost btn-icon btn-sm"
+                          onClick={handleConfirmRename}
+                          aria-label="Confirm rename"
+                        >
+                          <FiCheck size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {cls.name}
+                        </span>
+                        <span style={{
+                          fontSize: '11px',
+                          color: 'var(--text-secondary)',
+                          fontWeight: 500,
+                          fontFamily: 'var(--font-tech)',
+                        }}>
+                          {cls.samples.length}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  {editingId !== cls.id && (
+                    <div style={{ display: 'flex', gap: '2px', opacity: 0.6 }}>
                       <button
-                        className="btn btn-ghost btn-icon btn-sm"
-                        onClick={handleConfirmRename}
-                        aria-label="Confirm rename"
+                        className="btn btn-ghost btn-icon"
+                        onClick={(e) => { e.stopPropagation(); handleStartRename(cls.id, cls.name); }}
+                        style={{ padding: '4px' }}
+                        aria-label={`Rename ${cls.name}`}
                       >
-                        <FiCheck size={14} />
+                        <FiEdit2 size={13} />
                       </button>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {cls.name}
-                      </span>
-                      <span style={{
-                        fontSize: '11px',
-                        color: 'var(--text-secondary)',
-                        fontWeight: 500,
-                      }}>
-                        {cls.samples.length}
-                      </span>
+                      <button
+                        className="btn btn-ghost btn-icon"
+                        onClick={(e) => { e.stopPropagation(); handleDelete(cls.id); }}
+                        style={{ padding: '4px', color: 'var(--error)' }}
+                        aria-label={`Delete ${cls.name}`}
+                      >
+                        <FiTrash2 size={13} />
+                      </button>
                     </div>
                   )}
                 </div>
-
-                {/* Actions */}
-                {editingId !== cls.id && (
-                  <div style={{ display: 'flex', gap: '2px', opacity: 0.6 }}>
-                    <button
-                      className="btn btn-ghost btn-icon"
-                      onClick={(e) => { e.stopPropagation(); handleStartRename(cls.id, cls.name); }}
-                      style={{ padding: '4px' }}
-                      aria-label={`Rename ${cls.name}`}
-                    >
-                      <FiEdit2 size={13} />
-                    </button>
-                    <button
-                      className="btn btn-ghost btn-icon"
-                      onClick={(e) => { e.stopPropagation(); handleDelete(cls.id); }}
-                      style={{ padding: '4px', color: 'var(--error)' }}
-                      aria-label={`Delete ${cls.name}`}
-                    >
-                      <FiTrash2 size={13} />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
       </div>
 
