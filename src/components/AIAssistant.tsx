@@ -74,6 +74,7 @@ export default function AIAssistant() {
         },
         (error) => {
           setIsOnline(false);
+          setIsLoading(false); // Stop loading dots immediately on error
           // Show offline tips instead
           const tips = getOfflineTips(
             lastMetric?.accuracy || 0,
@@ -96,7 +97,6 @@ export default function AIAssistant() {
       );
     } catch (error) {
       setIsLoading(false);
-      // CRITICAL FIX: Do not swallow the error. Notify the user.
       console.error("AI Communication Error:", error);
       toast.error("Failed to connect to the AI Assistant."); 
     }
@@ -122,9 +122,15 @@ export default function AIAssistant() {
           </div>
         </div>
         {isOnline ? (
-          <FiWifi size={14} style={{ color: 'var(--secondary)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <FiWifi size={14} style={{ color: 'var(--secondary)' }} />
+            <span style={{ fontSize: '10px', color: 'var(--secondary)', fontWeight: 600, fontFamily: 'var(--font-tech)' }}>Live</span>
+          </div>
         ) : (
-          <FiWifiOff size={14} style={{ color: 'var(--error)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <FiWifiOff size={14} style={{ color: 'var(--warning, #F2B759)' }} />
+            <span style={{ fontSize: '10px', color: 'var(--warning, #F2B759)', fontWeight: 600, fontFamily: 'var(--font-tech)' }}>Offline</span>
+          </div>
         )}
       </div>
 

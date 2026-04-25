@@ -1,15 +1,17 @@
-/** Text capture — textarea input with chip preview for text classification */
+/** Text capture — textarea input + file upload with chip preview for text classification */
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useStore } from '../../store';
 import { STRINGS } from '../../constants';
-import { FiPlus, FiX, FiType } from 'react-icons/fi';
+import { FiPlus, FiX, FiType, FiUpload, FiFile } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useDropzone } from 'react-dropzone';
 import toast from 'react-hot-toast';
 
 export default function TextCapture() {
-  const { currentProject, selectedClassId, addSample, removeSample } = useStore();
+  const { currentProject, selectedClassId, addSample, addSamples, removeSample } = useStore();
   const [textValue, setTextValue] = useState('');
+  const [captureMode, setCaptureMode] = useState<'type' | 'upload'>('type');
 
   const selectedClass = currentProject?.classes.find((c) => c.id === selectedClassId);
 
@@ -36,8 +38,83 @@ export default function TextCapture() {
     }
   };
 
+  /** Handle file drop — parse .txt (one sample per line) or .csv */
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    if (!selectedClassId) {
+      toast.error('Select a class first');
+      return;
+    }
+
+    for (const file of acceptedFiles) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result as string;
+        let lines: string[];
+
+        if (file.name.endsWith('.csv')) {
+          // CSV: skip header, use first column as text
+          const rows = text.split('\n').filter((l) => l.trim());
+          lines = rows.slice(1).map((row) => {
+            // Handle quoted CSV fields
+            const match = row.match(/^"([^"]*)"/) || row.match(/^([^,]*)/);
+            return match ? match[1].trim() : row.trim();
+          });
+        } else {
+          // TXT: one sample per line
+          lines = text.split('\n').filter((l) => l.trim());
+        }
+
+        const validLines = lines.filter((l) => l.length > 0);
+        if (validLines.length === 0) {
+          toast.error('No valid text found in file');
+          return;
+        }
+
+        const samples = validLines.map((line) => ({
+          type: 'text' as const,
+          data: line,
+          preview: line.slice(0, 60),
+        }));
+
+        addSamples(selectedClassId!, samples);
+        toast.success(`Added ${samples.length} text samples from ${file.name}`);
+      };
+      reader.readAsText(file);
+    }
+  }, [selectedClassId, addSamples]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'text/plain': ['.txt'],
+      'text/csv': ['.csv'],
+      'application/vnd.ms-excel': ['.csv'],
+    },
+    noClick: false,
+  });
+
   return (
     <div>
+      {/* Mode Tabs */}
+      <div className="tab-group" style={{ marginBottom: '16px' }}>
+        <button
+          className={`tab-item ${captureMode === 'type' ? 'active' : ''}`}
+          onClick={() => setCaptureMode('type')}
+          aria-label="Type text manually"
+        >
+          <FiType size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+          Type
+        </button>
+        <button
+          className={`tab-item ${captureMode === 'upload' ? 'active' : ''}`}
+          onClick={() => setCaptureMode('upload')}
+          aria-label="Upload text file"
+        >
+          <FiUpload size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+          Upload
+        </button>
+      </div>
+
       {/* Selected class indicator */}
       {selectedClass && (
         <div style={{
@@ -58,37 +135,56 @@ export default function TextCapture() {
         </div>
       )}
 
-      {/* Text input */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <FiType size={16} style={{
-            position: 'absolute',
-            left: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: 'var(--text-secondary)',
-          }} />
-          <textarea
-            className="input"
-            value={textValue}
-            onChange={(e) => setTextValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={STRINGS.CAPTURE_TEXT_PLACEHOLDER}
-            style={{ paddingLeft: '36px', minHeight: '60px' }}
-            aria-label="Text sample input"
-          />
+      {captureMode === 'type' ? (
+        /* Manual text input */
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <FiType size={16} style={{
+              position: 'absolute',
+              left: '12px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-secondary)',
+            }} />
+            <textarea
+              className="input"
+              value={textValue}
+              onChange={(e) => setTextValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={STRINGS.CAPTURE_TEXT_PLACEHOLDER}
+              style={{ paddingLeft: '36px', minHeight: '60px' }}
+              aria-label="Text sample input"
+            />
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleAdd}
+            disabled={!textValue.trim() || !selectedClassId}
+            aria-label="Add text sample"
+            style={{ alignSelf: 'flex-start' }}
+          >
+            <FiPlus size={16} />
+            Add
+          </button>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={handleAdd}
-          disabled={!textValue.trim() || !selectedClassId}
-          aria-label="Add text sample"
-          style={{ alignSelf: 'flex-start' }}
+      ) : (
+        /* File upload mode */
+        <div
+          {...getRootProps()}
+          className={`drop-zone ${isDragActive ? 'active' : ''}`}
+          aria-label="Drop zone for text files"
+          style={{ marginBottom: '16px' }}
         >
-          <FiPlus size={16} />
-          Add
-        </button>
-      </div>
+          <input {...getInputProps()} />
+          <FiFile size={40} style={{ marginBottom: '12px', opacity: 0.5 }} />
+          <p style={{ fontWeight: 600, marginBottom: '4px' }}>
+            Drag & drop text files here, or click to browse
+          </p>
+          <p style={{ fontSize: '12px', opacity: 0.6 }}>
+            .txt (one sample per line) or .csv (first column)
+          </p>
+        </div>
+      )}
 
       {/* Text samples as chips */}
       {selectedClass && selectedClass.samples.length > 0 && (

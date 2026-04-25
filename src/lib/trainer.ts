@@ -1,6 +1,6 @@
 /**
  * TensorFlow.js ML Trainer — handles all in-browser machine learning
- * Supports image (MobileNet transfer learning), text, and CSV classification
+ * Supports image (MobileNet transfer learning), text (Bag-of-Words TF-IDF), and CSV classification
  * Rule 14: Training is cancellable via model.stopTraining = true
  */
 
@@ -14,6 +14,7 @@ let isStopRequested = false;
 
 // Persist data preprocessing states for inference
 let textVocab: Record<string, number> = {};
+let textIdf: Record<string, number> = {};
 let csvMin: tf.Tensor | null = null;
 let csvMax: tf.Tensor | null = null;
 
@@ -24,6 +25,7 @@ const PREPROCESSING_KEY = 'tm-preprocessing-state';
 
 interface PreprocessingState {
   textVocab: Record<string, number>;
+  textIdf: Record<string, number>;
   csvMin: number[] | null;
   csvMax: number[] | null;
 }
@@ -33,6 +35,7 @@ function savePreprocessingState(): void {
   try {
     const state: PreprocessingState = {
       textVocab,
+      textIdf,
       csvMin: csvMin ? Array.from(csvMin.dataSync()) : null,
       csvMax: csvMax ? Array.from(csvMax.dataSync()) : null,
     };
@@ -53,6 +56,11 @@ function restorePreprocessingState(): void {
     // Restore textVocab (plain object, always safe)
     if (state.textVocab && Object.keys(state.textVocab).length > 0) {
       textVocab = state.textVocab;
+    }
+
+    // Restore textIdf
+    if (state.textIdf && Object.keys(state.textIdf).length > 0) {
+      textIdf = state.textIdf;
     }
 
     // Restore csvMin / csvMax as 1-D tensors, kept outside tf.tidy
@@ -148,50 +156,147 @@ async function prepareImageDataset(
   return { features: featureTensor, labels: labelsTensor };
 }
 
-/** Build text tokenizer and prepare text dataset */
-function prepareTextDataset(
-  classes: ClassData[]
-): { sequences: tf.Tensor; labels: tf.Tensor; vocabSize: number } {
-  // Build vocabulary
-  const wordCounts: Record<string, number> = {};
+// ── Text Processing: Bag-of-Words with TF-IDF ───────────────
+
+/** Tokenize text: lowercase, remove punctuation, split on whitespace */
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')  // remove punctuation
+    .split(/\s+/)
+    .filter((w) => w.length > 1); // remove single-char words
+}
+
+/** Build Bag-of-Words vocabulary and IDF weights from training data */
+function buildBowVocabulary(classes: ClassData[]): {
+  vocab: Record<string, number>;
+  idf: Record<string, number>;
+} {
+  const docFreq: Record<string, number> = {};
+  let totalDocs = 0;
+  const allWords = new Set<string>();
+
+  // Count document frequency for each word
   for (const cls of classes) {
     for (const sample of cls.samples) {
-      const words = sample.data.toLowerCase().split(/\s+/);
-      for (const word of words) {
-        wordCounts[word] = (wordCounts[word] || 0) + 1;
-      }
+      const words = new Set(tokenize(sample.data));
+      totalDocs++;
+      words.forEach((word) => {
+        allWords.add(word);
+        docFreq[word] = (docFreq[word] || 0) + 1;
+      });
     }
   }
 
-  // Create word index (top N words)
-  const sortedWords = Object.entries(wordCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, ML_CONFIG.TEXT_VOCAB_SIZE - 1);
-  const wordIndex: Record<string, number> = {};
-  sortedWords.forEach(([word], i) => {
-    wordIndex[word] = i + 1; // 0 is reserved for padding
-  });
-  textVocab = wordIndex; // Save globally for inference
+  // Sort by frequency and take top N
+  const sortedWords = [...allWords]
+    .sort((a, b) => (docFreq[b] || 0) - (docFreq[a] || 0))
+    .slice(0, ML_CONFIG.TEXT_VOCAB_SIZE);
 
-  const maxLen = 100;
-  const allSequences: number[][] = [];
+  // Build vocab index
+  const vocab: Record<string, number> = {};
+  sortedWords.forEach((word, i) => {
+    vocab[word] = i;
+  });
+
+  // Compute IDF: log(totalDocs / docFreq)
+  const idf: Record<string, number> = {};
+  sortedWords.forEach((word) => {
+    idf[word] = Math.log((totalDocs + 1) / ((docFreq[word] || 0) + 1)) + 1;
+  });
+
+  return { vocab, idf };
+}
+
+/** Convert a single text to a TF-IDF vector using the vocabulary */
+function textToTfIdfVector(text: string, vocab: Record<string, number>, idf: Record<string, number>): number[] {
+  const vocabSize = Object.keys(vocab).length;
+  const vector = new Array(vocabSize).fill(0);
+  const words = tokenize(text);
+
+  // Count term frequencies
+  const tf_counts: Record<string, number> = {};
+  for (const word of words) {
+    if (word in vocab) {
+      tf_counts[word] = (tf_counts[word] || 0) + 1;
+    }
+  }
+
+  // Compute TF-IDF for each word
+  const maxTf = Math.max(...Object.values(tf_counts), 1);
+  for (const [word, count] of Object.entries(tf_counts)) {
+    const idx = vocab[word];
+    if (idx !== undefined) {
+      // Normalized TF * IDF
+      const normalizedTf = count / maxTf;
+      vector[idx] = normalizedTf * (idf[word] || 1);
+    }
+  }
+
+  // L2 normalize the entire vector for better model performance
+  const norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
+  if (norm > 0) {
+    for (let i = 0; i < vector.length; i++) {
+      vector[i] /= norm;
+    }
+  }
+
+  return vector;
+}
+
+/** Build TF-IDF dataset for text classification */
+function prepareTextDataset(
+  classes: ClassData[]
+): { features: tf.Tensor; labels: tf.Tensor; vocabSize: number } {
+  // Build vocabulary and IDF weights
+  const { vocab, idf } = buildBowVocabulary(classes);
+  textVocab = vocab; // Save globally for inference
+  textIdf = idf;     // Save IDF for inference
+
+  const vocabSize = Object.keys(vocab).length;
+  const allFeatures: number[][] = [];
   const allLabels: number[] = [];
 
   for (let classIdx = 0; classIdx < classes.length; classIdx++) {
     for (const sample of classes[classIdx].samples) {
-      const words = sample.data.toLowerCase().split(/\s+/);
-      const seq = words.map((w) => wordIndex[w] || 0).slice(0, maxLen);
-      while (seq.length < maxLen) seq.push(0); // pad
-      allSequences.push(seq);
+      const vector = textToTfIdfVector(sample.data, vocab, idf);
+      allFeatures.push(vector);
       allLabels.push(classIdx);
     }
   }
 
   return {
-    sequences: tf.tensor2d(allSequences),
+    features: tf.tensor2d(allFeatures),
     labels: tf.oneHot(tf.tensor1d(allLabels, 'int32'), classes.length),
-    vocabSize: Math.min(Object.keys(wordIndex).length + 1, ML_CONFIG.TEXT_VOCAB_SIZE),
+    vocabSize,
   };
+}
+
+/** Get adaptive training config based on sample count */
+function getAdaptiveConfig(totalSamples: number, config: TrainingConfig): {
+  epochs: number;
+  learningRate: number;
+  batchSize: number;
+  validationSplit: number;
+} {
+  let { epochs, learningRate, batchSize, validationSplit } = config;
+
+  if (totalSamples < 20) {
+    // Very few samples — no validation, more epochs, smaller batch
+    validationSplit = 0;
+    epochs = Math.max(epochs, 100);
+    batchSize = Math.min(batchSize, totalSamples);
+    learningRate = Math.min(learningRate, 0.005);
+  } else if (totalSamples < 50) {
+    validationSplit = 0.1;
+    epochs = Math.max(epochs, 80);
+    batchSize = Math.min(batchSize, Math.ceil(totalSamples / 2));
+  } else if (totalSamples < 100) {
+    validationSplit = Math.min(validationSplit, 0.15);
+    batchSize = Math.min(batchSize, 16);
+  }
+
+  return { epochs, learningRate, batchSize, validationSplit };
 }
 
 /** Build and train image classification model */
@@ -203,6 +308,8 @@ async function trainImageModel(
 ): Promise<tf.LayersModel> {
   const { features, labels } = await prepareImageDataset(classes, onProgress);
   const featureShape = features.shape[1]!;
+  const totalSamples = features.shape[0];
+  const adaptive = getAdaptiveConfig(totalSamples, config);
 
   const model = tf.sequential();
   model.add(tf.layers.dense({ inputShape: [featureShape], units: 128, activation: 'relu' }));
@@ -212,7 +319,7 @@ async function trainImageModel(
   model.add(tf.layers.dense({ units: classes.length, activation: 'softmax' }));
 
   model.compile({
-    optimizer: tf.train.adam(config.learningRate),
+    optimizer: tf.train.adam(adaptive.learningRate),
     loss: 'categoricalCrossentropy',
     metrics: ['accuracy'],
   });
@@ -220,9 +327,9 @@ async function trainImageModel(
   onProgress?.('Training started...');
 
   await model.fit(features, labels, {
-    epochs: config.epochs,
-    batchSize: config.batchSize,
-    validationSplit: config.validationSplit,
+    epochs: adaptive.epochs,
+    batchSize: adaptive.batchSize,
+    validationSplit: adaptive.validationSplit,
     shuffle: true,
     callbacks: {
       onEpochEnd: async (epoch, logs) => {
@@ -247,37 +354,46 @@ async function trainImageModel(
   return model;
 }
 
-/** Build and train text classification model */
+/** Build and train text classification model using Bag-of-Words TF-IDF */
 async function trainTextModel(
   classes: ClassData[],
   config: TrainingConfig,
   onEpochEnd: (metrics: TrainingMetrics) => void
 ): Promise<tf.LayersModel> {
-  const { sequences, labels, vocabSize } = prepareTextDataset(classes);
+  const { features, labels, vocabSize } = prepareTextDataset(classes);
+  const totalSamples = features.shape[0];
+  const adaptive = getAdaptiveConfig(totalSamples, config);
+
+  console.log(`Text model: ${totalSamples} samples, vocab size: ${vocabSize}, ` +
+    `epochs: ${adaptive.epochs}, valSplit: ${adaptive.validationSplit}`);
 
   const model = tf.sequential();
-  model.add(
-    tf.layers.embedding({
-      inputDim: vocabSize,
-      outputDim: ML_CONFIG.TEXT_EMBEDDING_DIM,
-      inputLength: 100,
-    })
-  );
-  model.add(tf.layers.globalAveragePooling1d());
-  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+
+  // Simple dense network on TF-IDF features — works great with small data
+  model.add(tf.layers.dense({
+    inputShape: [vocabSize],
+    units: Math.min(64, Math.max(16, Math.floor(vocabSize / 2))),
+    activation: 'relu',
+    kernelRegularizer: tf.regularizers.l2({ l2: 0.01 }),
+  }));
   model.add(tf.layers.dropout({ rate: 0.3 }));
+  model.add(tf.layers.dense({
+    units: Math.min(32, Math.max(8, Math.floor(vocabSize / 4))),
+    activation: 'relu',
+  }));
+  model.add(tf.layers.dropout({ rate: 0.2 }));
   model.add(tf.layers.dense({ units: classes.length, activation: 'softmax' }));
 
   model.compile({
-    optimizer: tf.train.adam(config.learningRate),
+    optimizer: tf.train.adam(adaptive.learningRate),
     loss: 'categoricalCrossentropy',
     metrics: ['accuracy'],
   });
 
-  await model.fit(sequences, labels, {
-    epochs: config.epochs,
-    batchSize: config.batchSize,
-    validationSplit: config.validationSplit,
+  await model.fit(features, labels, {
+    epochs: adaptive.epochs,
+    batchSize: adaptive.batchSize,
+    validationSplit: adaptive.validationSplit,
     shuffle: true,
     callbacks: {
       onEpochEnd: async (epoch, logs) => {
@@ -296,7 +412,7 @@ async function trainTextModel(
     },
   });
 
-  sequences.dispose();
+  features.dispose();
   labels.dispose();
 
   return model;
@@ -328,12 +444,13 @@ async function trainCSVModel(
 
   const featureDim = allFeatures[0].length;
   const featureTensor = tf.tensor2d(allFeatures);
+  const totalSamples = allFeatures.length;
+  const adaptive = getAdaptiveConfig(totalSamples, config);
 
   // Min-max normalize
-  if (csvMin) csvMin.dispose(); // Cleanup old training runs
+  if (csvMin) csvMin.dispose();
   if (csvMax) csvMax.dispose();
 
-  // Use tf.keep() to prevent garbage collection
   csvMin = tf.keep(featureTensor.min(0));
   csvMax = tf.keep(featureTensor.max(0));
 
@@ -349,15 +466,15 @@ async function trainCSVModel(
   model.add(tf.layers.dense({ units: classes.length, activation: 'softmax' }));
 
   model.compile({
-    optimizer: tf.train.adam(config.learningRate),
+    optimizer: tf.train.adam(adaptive.learningRate),
     loss: 'categoricalCrossentropy',
     metrics: ['accuracy'],
   });
 
   await model.fit(normalized, labelsTensor, {
-    epochs: config.epochs,
-    batchSize: config.batchSize,
-    validationSplit: config.validationSplit,
+    epochs: adaptive.epochs,
+    batchSize: adaptive.batchSize,
+    validationSplit: adaptive.validationSplit,
     shuffle: true,
     callbacks: {
       onEpochEnd: async (epoch, logs) => {
@@ -388,11 +505,6 @@ async function trainCSVModel(
 
 /**
  * Train a model based on the data type
- * @param dataType - The type of data to train on
- * @param classes - Array of class data with samples
- * @param config - Training configuration
- * @param onEpochEnd - Callback for each epoch completion
- * @param onProgress - Optional progress message callback
  */
 export async function trainModel(
   dataType: DataType,
@@ -422,8 +534,6 @@ export async function trainModel(
         break;
       case 'audio': {
         // Bug 3a fix: Validate that audio samples have been converted to spectrogram images.
-        // The AudioCapture component stores raw audio as data:audio/* blobs.
-        // Training on raw audio requires spectrogram conversion first.
         const firstSample = classes[0]?.samples[0];
         if (firstSample && !isValidImageData(firstSample.data)) {
           throw new Error(
@@ -443,8 +553,7 @@ export async function trainModel(
       await currentModel.save('localstorage://teachable-machine-model');
     }
 
-    // Bug 1 fix: Persist preprocessing state (textVocab, csvMin, csvMax)
-    // so inference works correctly after page reloads.
+    // Persist preprocessing state (textVocab, textIdf, csvMin, csvMax)
     savePreprocessingState();
   } catch (error) {
     if (!isStopRequested) throw error;
@@ -467,16 +576,12 @@ export async function predict(
     // Try loading from localStorage
     try {
       currentModel = await tf.loadLayersModel('localstorage://teachable-machine-model');
-      // Bug 1 fix: Also restore preprocessing state when reloading model
       restorePreprocessingState();
     } catch {
       throw new Error('No trained model found. Please train a model first.');
     }
   }
 
-  // Bug 3b fix: Wrap inference in tf.tidy() but do NOT manually dispose
-  // tensors created inside it — tf.tidy() handles cleanup automatically.
-  // Manual dispose inside tidy() is redundant and can cause double-dispose warnings.
   return tf.tidy(() => {
     let inputTensor: tf.Tensor;
 
@@ -494,25 +599,19 @@ export async function predict(
         break;
       }
       case 'text': {
-        const words = input.toLowerCase().split(/\s+/);
-        // Map words to the exact integer IDs learned during training
-        const seq = words.map((w) => textVocab[w] || 0).slice(0, 100);
-        while (seq.length < 100) seq.push(0);
-        inputTensor = tf.tensor2d([seq]);
+        // Use Bag-of-Words TF-IDF vectorization (matches training)
+        const vector = textToTfIdfVector(input, textVocab, textIdf);
+        inputTensor = tf.tensor2d([vector]);
         break;
       }
       case 'csv': {
         const values = JSON.parse(input) as number[];
         const rawTensor = tf.tensor2d([values]);
         
-        // Normalize the incoming inference data using the training bounds
         if (csvMin && csvMax) {
           const range = csvMax.sub(csvMin).add(1e-7);
           inputTensor = rawTensor.sub(csvMin).div(range);
-          // Bug 3b fix: Do NOT call range.dispose() or rawTensor.dispose() here.
-          // tf.tidy() will dispose all intermediate tensors automatically.
         } else {
-          // Fallback: unnormalized (will produce poor results, but won't crash)
           console.warn('CSV normalization bounds not available. Predictions may be inaccurate.');
           inputTensor = rawTensor;
         }
@@ -552,9 +651,10 @@ export async function exportModel(): Promise<{ modelJSON: string; weightsData: A
     };
   }));
 
-  // Include preprocessing state in export so imported models work correctly
+  // Include preprocessing state in export
   const preprocessingState = JSON.stringify({
     textVocab,
+    textIdf,
     csvMin: csvMin ? Array.from(csvMin.dataSync()) : null,
     csvMax: csvMax ? Array.from(csvMax.dataSync()) : null,
   });

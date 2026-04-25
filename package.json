@@ -20,6 +20,7 @@
     "vite": "^8.0.9"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@tensorflow-models/mobilenet": "^2.1.1",
     "@tensorflow/tfjs": "^4.22.0",
     "file-saver": "^2.0.5",
