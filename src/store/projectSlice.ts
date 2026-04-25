@@ -227,7 +227,7 @@ export const createProjectSlice: StateCreator<ProjectSlice> = (set, get) => ({
     const { currentProject, savedProjects } = get();
     if (!currentProject) return;
     
-    // Update local UI state immediately for snappy response
+    // 1. Update local UI state immediately for snappy response
     const existing = savedProjects.findIndex((p) => p.id === currentProject.id);
     const updated = [...savedProjects];
     if (existing >= 0) {
@@ -237,21 +237,41 @@ export const createProjectSlice: StateCreator<ProjectSlice> = (set, get) => ({
     }
     set({ savedProjects: updated });
 
-    // Send data to FastAPI backend
+    // 2. Persist to localStorage (always works, even offline)
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'}/projects`, {
+      localStorage.setItem('tm_projects', JSON.stringify(updated));
+    } catch {
+      console.warn('Failed to save to localStorage');
+    }
+
+    // 3. Send to FastAPI backend with correct route and payload shape
+    try {
+      const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBase}/api/projects`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(currentProject),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentProject.id,
+          name: currentProject.name,
+          data_type: currentProject.dataType,
+          classes_count: currentProject.classes.length,
+          metadata: {
+            created_at: currentProject.createdAt,
+            updated_at: currentProject.updatedAt,
+            model_trained: currentProject.modelTrained,
+            total_samples: currentProject.classes.reduce(
+              (sum, c) => sum + c.samples.length, 0
+            ),
+          },
+        }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save to backend');
+        console.warn(`Backend save returned ${response.status}`);
       }
-    } catch (error) {
-      console.error('Backend save failed:', error);
+    } catch {
+      // Backend offline — localStorage save above still works
+      console.warn('Backend unreachable, project saved to localStorage only');
     }
   },
 

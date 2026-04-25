@@ -20,7 +20,7 @@ app = FastAPI(
 )
 
 # CORS — restrict to frontend domain in production
-cors_origins = os.getenv("CORS_ORIGIN", "http://localhost:5173").split(",")
+cors_origins = os.getenv("CORS_ORIGIN", "http://localhost:5173,http://localhost:5174").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -85,15 +85,23 @@ Your responsibilities:
 async def ai_chat(req: ChatRequest):
     """Stream AI chat response from Gemini API"""
     if not GEMINI_API_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="Gemini API key not configured. Add GEMINI_API_KEY to .env",
+        # Return a structured SSE error instead of crashing with 503.
+        # The frontend's tryBackendProxy reads SSE — so we send an error event
+        # that the client can parse and fall back from gracefully.
+        def no_key_stream():
+            yield f'data: {json.dumps({"text": "AI Assistant is not configured. Please add GEMINI_API_KEY to your backend .env file."})}\n\n'
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(
+            no_key_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
 
     try:
         system = build_system_prompt(req.context)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-2.0-flash",
             system_instruction=system,
         )
 

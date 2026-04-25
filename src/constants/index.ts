@@ -94,7 +94,7 @@ export const STRINGS = {
 
   // AI Assistant
   AI_TITLE: 'AI Assistant',
-  AI_POWERED_BY: 'Powered by Google Gemini',
+  AI_POWERED_BY: 'Powered by Gemini & Groq',
   AI_PLACEHOLDER: 'Ask me about your model...',
   AI_OFFLINE_TIP: 'AI is offline. Here are some tips based on your metrics:',
 
